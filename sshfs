@@ -1,0 +1,69 @@
+#!/bin/sh
+# sshfs-dav is script that operates like sshfs but mounts files using webdav (rclone) over an ssh connection
+# 2022, Don Mahurin, MIT License
+
+lport=8988
+rport=$lport
+foreground=
+
+if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f]" ; exit 1 ; fi
+
+for next in "$@" ''; do
+	if [ -z "$arg" ]; then
+		if [ -z "$hostpath" ] ; then hostpath="$next"
+		elif [ -z "$mountdir" ] ; then mountdir="$next"
+		else
+			arg="$next"
+		fi
+		continue
+	fi
+	case "$arg" in
+		-f) foreground=1;;
+		-L) lport="$next";;
+		-R) rport="$next";;
+		*) echo unknown option "$arg";;
+	esac
+	arg="$next"
+done
+
+if [ -t 1 ]; then
+	[ -n "$SSH_AGENT_PID" ] || eval "$(ssh-agent -s)"
+	( ssh-add -l > /dev/null ) || ssh-add
+	if [ -z "$foreground" ]; then
+		( nohup "$0" "$@" </dev/null >/dev/null 2>&1 & )
+		exit 0
+	fi
+fi
+
+host="$(echo "$hostpath" | cut -d: -f1)"
+path="$(echo "$hostpath" | cut -d: -f2)"
+[ -n "$path" ] || path=.
+[ -d "$mountdir" ] || mkdir -p "$mountdir"
+
+cleanup() {
+	echo Interrupted
+	umount "$mountdir"
+	if [ -n "$pid" ]; then
+		kill -TERM "$pid"
+		wait "$pid"
+	fi
+}
+
+trap 'cleanup' 2
+
+echo "starting webdav forwarded from local $lport to remote $rport"
+ssh -tt -L "$lport:localhost:$rport" "$host" rclone serve webdav --quiet --addr "localhost:$rport" "$path" &
+pid=$!
+sleep 3
+
+echo "mounting webdav"
+mount_webdav=$(which mount_webdav || which mount.davfs)
+$mount_webdav http://localhost:$lport/ "$mountdir"
+echo "mounted to '$mountdir'"
+
+echo "waiting for unmount"
+while ( sleep 5 ) ; do
+	( df | grep -q " $(cd "$mountdir" ; pwd)"'$' ) || break
+done
+kill -TERM "$pid"
+echo "unmounted '$mountdir'"

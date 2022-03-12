@@ -6,6 +6,7 @@ lport=8988
 rport=$lport
 foreground=
 options=
+compression=no
 
 if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f] [-o OPTIONS]" ; exit 1 ; fi
 
@@ -20,6 +21,7 @@ for next in "$@" ''; do
 	fi
 	case "$arg" in
 		-f) foreground=1;;
+		-C) compression=yes ;;
 		-L) lport="$next"; next= ;;
 		-R) rport="$next"; next= ;;
 		-o) options="-o $next"; next= ;;
@@ -55,7 +57,7 @@ cleanup() {
 trap 'cleanup' 2
 
 echo "starting webdav forwarded from local $lport to remote $rport"
-ssh -tt -L "$lport:localhost:$rport" "$host" rclone serve webdav --quiet --addr "localhost:$rport" "$path" &
+ssh -tt -o "Compression $compression" -L "$lport:localhost:$rport" "$host" rclone serve webdav --quiet --addr "localhost:$rport" "$path" &
 pid=$!
 sleep 3
 

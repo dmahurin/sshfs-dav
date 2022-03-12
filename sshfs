@@ -5,8 +5,9 @@
 lport=8988
 rport=$lport
 foreground=
+options=
 
-if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f]" ; exit 1 ; fi
+if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f] [-o OPTIONS]" ; exit 1 ; fi
 
 for next in "$@" ''; do
 	if [ -z "$arg" ]; then
@@ -19,8 +20,10 @@ for next in "$@" ''; do
 	fi
 	case "$arg" in
 		-f) foreground=1;;
-		-L) lport="$next";;
-		-R) rport="$next";;
+		-L) lport="$next"; next= ;;
+		-R) rport="$next"; next= ;;
+		-o) options="-o $next"; next= ;;
+		"") ;;
 		*) echo unknown option "$arg";;
 	esac
 	arg="$next"
@@ -58,7 +61,7 @@ sleep 3
 
 echo "mounting webdav"
 mount_webdav=$(which mount_webdav || which mount.davfs)
-$mount_webdav http://localhost:$lport/ "$mountdir"
+$mount_webdav $options http://localhost:$lport/ "$mountdir"
 echo "mounted to '$mountdir'"
 
 echo "waiting for unmount"

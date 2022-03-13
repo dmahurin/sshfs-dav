@@ -11,22 +11,18 @@ compression=no
 if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f] [-o OPTIONS]" ; exit 1 ; fi
 
 for next in "$@" ''; do
-	if [ -z "$arg" ]; then
-		if [ -z "$hostpath" ] ; then hostpath="$next"
-		elif [ -z "$mountdir" ] ; then mountdir="$next"
-		else
-			arg="$next"
-		fi
-		continue
-	fi
-	case "$arg" in
+	[ -z "$arg" ] || case "$arg" in
 		-f) foreground=1;;
 		-C) compression=yes ;;
 		-L) lport="$next"; next= ;;
 		-R) rport="$next"; next= ;;
 		-o) options="-o $next"; next= ;;
-		"") ;;
-		*) echo unknown option "$arg";;
+		*)
+			if [ -z "$hostpath" ] ; then hostpath="$arg"
+			elif [ -z "$mountdir" ] ; then mountdir="$arg"
+			else echo unknown option "$arg"; break
+			fi
+			;;
 	esac
 	arg="$next"
 done

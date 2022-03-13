@@ -58,7 +58,23 @@ pid=$!
 sleep 3
 
 echo "mounting webdav"
-mount_webdav=$(which mount_webdav || which mount.davfs)
+mount_webdav=$(which mount_webdav)
+mount_webdav_rclone() {
+	conf="$(mktemp)"
+	mount_args=
+	if [ "$1" = "-o" ]; then
+		shift
+		for o in $(echo "$1" | tr ',' ' '); do case "$o" in
+			ro) mount_args="$mount_args --read-only" ;;
+		esac; done
+		shift
+	fi
+
+	rclone --config="$conf" config create dav webdav url "$1" && rclone --config="$conf" mount dav: "$2" --daemon $mount_args
+	sleep 2
+	rm "$conf"
+}
+[ -n "$mount_webdav" ] || mount_webdav=mount_webdav_rclone
 $mount_webdav $options http://localhost:$lport/ "$mountdir"
 echo "mounted to '$mountdir'"
 

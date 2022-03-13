@@ -2,8 +2,9 @@
 # sshfs-dav is script that operates like sshfs but mounts files using webdav (rclone) over an ssh connection
 # 2022, Don Mahurin, MIT License
 
-lport=8988
-rport=$lport
+lport=
+rport=
+portn=18800
 foreground=
 options=
 compression=no
@@ -16,6 +17,7 @@ for next in "$@" ''; do
 		-C) compression=yes ;;
 		-L) lport="$next"; next= ;;
 		-R) rport="$next"; next= ;;
+		-P) portn="$next"; next= ;;
 		-o) options="-o $next"; next= ;;
 		*)
 			if [ -z "$hostpath" ] ; then hostpath="$arg"
@@ -51,6 +53,9 @@ cleanup() {
 }
 
 trap 'cleanup' 2
+
+[ -n "$lport" ] || lport="$(expr $portn + $(id -u))"
+[ -n "$rport" ] || rport="$(expr $portn + 1 + $(ssh "$host" id -u))"
 
 echo "starting webdav forwarded from local $lport to remote $rport"
 ssh -tt -o "Compression $compression" -L "$lport:localhost:$rport" "$host" rclone serve webdav --quiet --addr "localhost:$rport" "$path" &

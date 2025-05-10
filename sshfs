@@ -6,7 +6,7 @@ lport=
 rport=
 portn=18800
 foreground=
-options=
+mount_args=
 compression=no
 
 if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f] [-o OPTIONS]" ; exit 1 ; fi
@@ -18,7 +18,7 @@ for next in "$@" ''; do
 		-L) lport="$next"; next= ;;
 		-R) rport="$next"; next= ;;
 		-P) portn="$next"; next= ;;
-		-o) options="-o $next"; next= ;;
+		-o) mount_args="-o $next"; next= ;;
 		*)
 			if [ -z "$hostpath" ] ; then hostpath="$arg"
 			elif [ -z "$mountdir" ] ; then mountdir="$arg"
@@ -39,8 +39,8 @@ if [ -t 1 ]; then
 fi
 
 host="$(echo "$hostpath" | cut -d: -f1)"
-path="$(echo "$hostpath" | cut -d: -f2)"
-[ -n "$path" ] || path=.
+hostpath="$(echo "$hostpath" | cut -d: -f2)"
+[ -n "$hostpath" ] || hostpath=.
 [ -d "$mountdir" ] || mkdir -p "$mountdir"
 
 cleanup() {
@@ -54,11 +54,11 @@ cleanup() {
 
 trap 'cleanup' 2
 
-[ -n "$lport" ] || lport="$(expr $portn + $(id -u))"
-[ -n "$rport" ] || rport="$(expr $portn + 1 + $(ssh "$host" id -u))"
+[ -n "$lport" ] || lport="$(expr $portn + $(id -u | rev | cut -c -3 | rev))"
+[ -n "$rport" ] || rport="$(expr $portn + 1 + $(ssh "$host" id -u | rev | cut -c -3 | rev))"
 
 echo "starting webdav forwarded from local $lport to remote $rport"
-ssh -tt -o "Compression $compression" -L "$lport:localhost:$rport" "$host" rclone serve webdav --quiet --addr "localhost:$rport" "$path" &
+ssh -tt -o "Compression $compression" -L "${lport}:localhost:${rport}" "$host" rclone serve webdav --quiet --addr "localhost:${rport}" "$hostpath" &
 pid=$!
 sleep 3
 
@@ -80,12 +80,12 @@ mount_webdav_rclone() {
 	rm "$conf"
 }
 [ -n "$mount_webdav" ] || mount_webdav=mount_webdav_rclone
-$mount_webdav $options http://localhost:$lport/ "$mountdir"
+$mount_webdav $mount_args http://localhost:$lport/ "$mountdir"
 echo "mounted to '$mountdir'"
 
 echo "waiting for unmount"
 while ( sleep 5 ) ; do
-	( df | grep -q " $(cd "$mountdir" ; pwd)"'$' ) || break
+	( df | grep -q " $(realpath "$mountdir" || readlink -f "$mountdir" || (cd "$mountdir" ; pwd))"'$' ) || break
 done
 kill -TERM "$pid"
 echo "unmounted '$mountdir'"

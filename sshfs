@@ -46,10 +46,8 @@ hostpath="$(echo "$hostpath" | cut -d: -f2)"
 cleanup() {
 	echo Interrupted
 	umount "$mountdir"
-	if [ -n "$pid" ]; then
-		kill -TERM "$pid"
-		wait "$pid"
-	fi
+	kill $(jobs -p) 2>/dev/null
+	wait 2>/dev/null
 }
 
 trap 'cleanup' 2
@@ -59,7 +57,6 @@ trap 'cleanup' 2
 
 echo "starting webdav forwarded from local $lport to remote $rport"
 ssh -tt -o "Compression $compression" -L "${lport}:localhost:${rport}" "$host" rclone serve webdav --quiet --addr "localhost:${rport}" "$hostpath" &
-pid=$!
 sleep 3
 
 echo "mounting webdav"
@@ -87,5 +84,6 @@ echo "waiting for unmount"
 while ( sleep 5 ) ; do
 	( df | grep -q " $(realpath "$mountdir" || readlink -f "$mountdir" || (cd "$mountdir" ; pwd))"'$' ) || break
 done
-kill -TERM "$pid"
+kill $(jobs -p) 2>/dev/null
+wait 2>/dev/null
 echo "unmounted '$mountdir'"

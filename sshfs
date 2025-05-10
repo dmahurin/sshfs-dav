@@ -30,8 +30,8 @@ for next in "$@" ''; do
 done
 
 if [ -t 1 ]; then
-	[ -n "$SSH_AGENT_PID" ] || eval "$(ssh-agent -s)"
-	( ssh-add -l > /dev/null ) || ssh-add
+	[ -n "$SSH_AGENT_PID" ] || eval "$(ssh-agent -s)" >/dev/null
+	( ssh-add -l >/dev/null ) || ssh-add -q
 	if [ -z "$foreground" ]; then
 		( nohup "$0" "$@" </dev/null >/dev/null 2>&1 & )
 		exit 0

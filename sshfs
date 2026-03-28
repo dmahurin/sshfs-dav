@@ -1,5 +1,5 @@
 #!/bin/sh
-# sshfs-dav is script that operates like sshfs but mounts files using webdav (rclone) over an ssh connection
+# sshfs-dav is script that operates like sshfs but mounts files using webdav or nfs via rclone over an ssh connection
 # 2022, Don Mahurin, MIT License
 
 lport=
@@ -7,6 +7,7 @@ rport=
 portn=18800
 foreground=
 mount_args=
+protocol=nfs
 compression=no
 
 if [ -z "$2" ]; then echo "usage: $0 [user@]host:[dir] mountpoint [-f] [-o OPTIONS]" ; exit 1 ; fi
@@ -18,7 +19,8 @@ for next in "$@" ''; do
 		-L) lport="$next"; next= ;;
 		-R) rport="$next"; next= ;;
 		-P) portn="$next"; next= ;;
-		-o) mount_args="-o $next"; next= ;;
+		-p) protocol="$next"; next= ;;
+		-o) mount_args="$mount_args $next"; next= ;;
 		*)
 			if [ -z "$hostpath" ] ; then hostpath="$arg"
 			elif [ -z "$mountdir" ] ; then mountdir="$arg"
@@ -55,13 +57,13 @@ trap 'cleanup' 2
 [ -n "$lport" ] || lport="$(expr $portn + $(id -u | rev | cut -c -3 | rev))"
 [ -n "$rport" ] || rport="$(expr $portn + 1 + $(ssh "$host" id -u | rev | cut -c -3 | rev))"
 
-echo "starting webdav forwarded from local $lport to remote $rport"
-ssh -tt -o "Compression $compression" -L "${lport}:localhost:${rport}" "$host" rclone serve webdav --quiet --addr "localhost:${rport}" "$hostpath" &
+echo "starting $protocol forwarded from local $lport to remote $rport"
+ssh -tt -o "Compression $compression" -L "${lport}:localhost:${rport}" "$host" rclone serve $protocol --quiet --vfs-cache-mode full --addr "localhost:${rport}" "$hostpath" &
 sleep 3
 
-echo "mounting webdav"
-mount_webdav=$(which mount_webdav)
-mount_webdav_rclone() {
+echo "mounting $protocol"
+mount_tool=$(which mount_$protocol)
+mount_tool_rclone() {
 	conf="$(mktemp)"
 	mount_args=
 	if [ "$1" = "-o" ]; then
@@ -72,12 +74,22 @@ mount_webdav_rclone() {
 		shift
 	fi
 
-	rclone --config="$conf" config create dav webdav url "$1" && rclone --config="$conf" mount dav: "$2" --daemon $mount_args
+	rclone --config="$conf" config create dav $protocol url "$1" && rclone --config="$conf" mount dav: "$2" --daemon $mount_args
 	sleep 2
 	rm "$conf"
 }
-[ -n "$mount_webdav" ] || mount_webdav=mount_webdav_rclone
-$mount_webdav $mount_args http://localhost:$lport/ "$mountdir"
+[ -n "$mount_tool" ] || mount_tool=mount_tool_rclone
+
+if [ "$protocol" = "webdav" ]; then
+	hostprefix="http://"
+	hostsuffix=":$lport"
+elif [ "$protocol" = "nfs" ]; then
+	mount_args="$mount_args port=$lport,mountport=$lport"
+	hostsuffix=":"
+fi
+if [ -n "$mount_args" ]; then mount_args="-o$mount_args"; fi
+$mount_tool $mount_args "${hostprefix}localhost$hostsuffix/" "$mountdir"
+
 echo "mounted to '$mountdir'"
 
 echo "waiting for unmount"
